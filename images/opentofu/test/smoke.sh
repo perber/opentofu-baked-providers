@@ -19,6 +19,12 @@ export TF_IN_AUTOMATION=1
 
 tofu version
 
+echo "--- the tools pipelines rely on are present"
+for tool in bash git jq ssh; do
+  command -v "$tool" >/dev/null || { echo "FAIL: $tool is missing from the image" >&2; exit 1; }
+done
+echo '{"ok":true}' | jq -e .ok >/dev/null
+
 echo "--- a baked-in provider installs from the mirror"
 cd "$work/baked"
 tofu init -input=false -backend=false -no-color

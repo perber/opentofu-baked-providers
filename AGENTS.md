@@ -65,8 +65,9 @@ Do not break these. If a task seems to require it, stop and say so.
 ## Versioning
 
 The image has its own SemVer version, computed by `scripts/next-version.sh` from the component
-versions at the last `v*` tag vs. HEAD: OpenTofu or provider **major** change or a provider removed
-→ major; **minor** change or a provider added → minor; any other change below `images/` → patch;
+versions at the last `v*` tag vs. HEAD: OpenTofu or provider **major** change, a provider or an
+`apk add` package removed → major; **minor** change, a provider or an `apk add` package added →
+minor; any other change below `images/` → patch;
 nothing below `images/` → no release. Every merge to `main` that changes `images/` is released
 automatically and reaches consumers on floating tags (`:1`, `:latest`) within minutes.
 

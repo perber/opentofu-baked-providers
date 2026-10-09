@@ -24,7 +24,7 @@ The release notes of each image are authoritative for that image; this table sho
 |-----------|---------|--------|
 | OpenTofu | 1.13.1 | `ghcr.io/opentofu/opentofu:1.13.1-minimal` (official image) |
 | Provider `hashicorp/vault` | 5.12.0 | `registry.opentofu.org` - used for OpenBao |
-| Base | Alpine 3.24.2 | with `bash`, `git` and `openssh-client`, like the official image |
+| Base | Alpine 3.24.2 | with `bash`, `git` and `openssh-client` like the official image, plus `jq` |
 
 ## Usage
 
@@ -205,13 +205,15 @@ OpenTofu and every provider between the last release tag and the current state.
 
 | Change since the last release | Bump | Example |
 |-------------------------------|------|---------|
-| major version of OpenTofu or a provider, provider removed | **major** | Vault provider 5.12.0 → 6.0.0 |
-| minor version of OpenTofu or a provider, provider added | **minor** | OpenTofu 1.13.1 → 1.14.0 |
+| major version of OpenTofu or a provider, provider or tool removed | **major** | Vault provider 5.12.0 → 6.0.0 |
+| minor version of OpenTofu or a provider, provider or tool added | **minor** | OpenTofu 1.13.1 → 1.14.0, `jq` added |
 | anything else below `images/` (patch versions, Alpine, Dockerfile, ...) | **patch** | Alpine 3.24.2 → 3.24.3 |
 | nothing below `images/` (e.g. README only) | no release | |
 
 For consumers this means: `:1` gets every update except those that can break existing
-configurations - a new major provider version never lands in `:1` on its own.
+configurations or pipelines - a new major provider version or a removed tool never lands in `:1` on
+its own. Tools are the Alpine packages of the Dockerfile's `apk add`; they count by presence, their
+versions move with the base image.
 
 The first release is `1.0.0`. Release notes list the versions each image contains.
 

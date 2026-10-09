@@ -6,13 +6,17 @@
 # The image carries its own SemVer version. With `auto` (the default) the bump follows the versions
 # of what the image ships, compared between the last `v*` tag and HEAD:
 #
-#   major  OpenTofu major version changed, a provider's major version changed, a provider removed
-#   minor  OpenTofu minor version changed, a provider's minor version changed, a provider added
+#   major  OpenTofu major version changed, a provider's major version changed, a provider removed,
+#          an Alpine package removed from `apk add`
+#   minor  OpenTofu minor version changed, a provider's minor version changed, a provider added,
+#          an Alpine package added to `apk add`
 #   patch  any other change below `images/` - patch versions, the base image, the Dockerfile, ...
 #   none   nothing below `images/` changed: no release
 #
 # A provider major version usually breaks configurations written against the old one, and a removed
-# provider breaks every configuration using it, so a consumer pinned to `:1` never gets either.
+# provider or tool breaks every pipeline using it, so a consumer pinned to `:1` never gets either.
+# An added tool is a new capability, like an added provider. The Alpine packages count by presence
+# only: their versions are not pinned (see the Dockerfile) and move with the base image.
 #
 # `major`, `minor` and `patch` force that bump even without changes - e.g. to republish the image
 # with the latest Alpine package fixes, which a rebuild picks up without any file changing.
@@ -35,11 +39,14 @@ case "$mode" in
 esac
 
 # Component versions at a git ref, one `<name> <version>` line each: OpenTofu from the `FROM` line
-# of the Dockerfile, every provider from `versions.tf` by its source address without the host.
+# of the Dockerfile, every provider from `versions.tf` by its source address without the host, every
+# package of the Dockerfile's `apk add` as `alpine/<package>` with the placeholder version `-`.
 components_at() {
   local ref="$1"
   git show "${ref}:${image_dir}/Dockerfile" |
     sed -nE 's#^FROM ghcr\.io/opentofu/opentofu:([0-9]+\.[0-9]+\.[0-9]+)-minimal.*#opentofu \1#p'
+  git show "${ref}:${image_dir}/Dockerfile" |
+    sed -nE 's#^RUN apk add --no-cache (.*)#\1#p' | tr ' ' '\n' | grep -v '^$' | sort | sed 's#^#alpine/#; s#$# -#'
   git show "${ref}:${image_dir}/providers/versions.tf" |
     awk -F'"' '
       /^[[:space:]]*source[[:space:]]*=/  { n = split($2, p, "/"); source = p[n-1] "/" p[n] }
@@ -116,7 +123,9 @@ mkdir -p out
 {
   echo "| Component | Version |"
   echo "|-----------|---------|"
-  awk '{ printf "| %s | %s |\n", $1, $2 }' <<<"$head_components"
+  awk '$1 !~ /^alpine\// { printf "| %s | %s |\n", $1, $2 }' <<<"$head_components"
+  awk '$1 ~ /^alpine\// { sub(/^alpine\//, "", $1); p = p (p ? ", " : "") $1 }
+       END { if (p) printf "| Alpine packages | %s |\n", p }' <<<"$head_components"
 } >out/release-notes.md
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
