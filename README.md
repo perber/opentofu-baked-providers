@@ -247,3 +247,19 @@ task providers:lock
 3. Use the provider in [images/opentofu/test/baked/main.tf](images/opentofu/test/baked/main.tf), so
    the smoke test covers it.
 4. Add it to the "What's inside" table. The release will be a minor release automatically.
+
+## License
+
+The code in this repository - Dockerfile, scripts, workflows, documentation - is licensed under the
+[Apache License 2.0](LICENSE).
+
+### Third-party software
+
+The image redistributes third-party software, unmodified and under its own license. The Apache
+License of this repository does not apply to it.
+
+| Component | License | Source |
+|-----------|---------|--------|
+| OpenTofu | MPL-2.0 | [github.com/opentofu/opentofu](https://github.com/opentofu/opentofu) (the tag of the version in "What's inside") |
+| Provider `hashicorp/vault` | MPL-2.0 | [github.com/hashicorp/terraform-provider-vault](https://github.com/hashicorp/terraform-provider-vault); the license text ships inside the provider package in the image |
+| Alpine Linux and its packages | various, e.g. GPL-2.0 (busybox, git), GPL-3.0-or-later (bash), MIT (musl) | [Alpine aports](https://gitlab.alpinelinux.org/alpine/aports) for the release in "What's inside"; `apk info -a <package>` in the image lists each package's license |
