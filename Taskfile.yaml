@@ -11,12 +11,13 @@ vars:
 
 tasks:
   default:
-    desc: Lint, build with smoke test, and scan - what a pull request runs.
+    desc: Lint, build with smoke test, scan, and license check - what a pull request runs.
     cmds:
     - task: lint
     - task: build
     - task: test
     - task: scan
+    - task: licenses
 
   lint:
     desc: hadolint over the Dockerfile, shellcheck over the scripts.
@@ -51,6 +52,19 @@ tasks:
         docker.io/aquasec/trivy:0.75.0
     cmds:
     - scripts/scan.sh {{ .LOCAL_IMAGE }}
+
+  licenses:
+    desc: License check of everything the built image redistributes, with the same gate as the pipeline.
+    env:
+      # The same containerised Trivy as `scan`.
+      TRIVY: >-
+        docker run --rm
+        --volume /var/run/docker.sock:/var/run/docker.sock
+        --volume {{ .ROOT_DIR }}:{{ .ROOT_DIR }} --workdir {{ .ROOT_DIR }}
+        --volume trivy-cache:/root/.cache/trivy
+        docker.io/aquasec/trivy:0.75.0
+    cmds:
+    - scripts/license-check.sh {{ .LOCAL_IMAGE }}
 
   version:
     desc: "Show the version a release of HEAD would get: `task version`, or `task version -- patch`."

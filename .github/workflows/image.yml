@@ -1,7 +1,7 @@
 name: image
 
 # Pull requests: lint, build (which runs the offline smoke test), smoke test the built image, Trivy
-# scan, and show the version a merge would release. Nothing is pushed.
+# scan, license check, and show the version a merge would release. Nothing is pushed.
 #
 # Default branch: the same, then push the image as `sha-<commit>`, pull it back and test and scan
 # exactly that, and - if anything below `images/` changed since the last release - promote it to
@@ -158,6 +158,12 @@ jobs:
     # `.trivyignore.yaml`. The report, accepted findings included, goes to the job summary.
     - name: trivy scan
       run: scripts/scan.sh "$SCAN_IMAGE"
+      env:
+        SCAN_IMAGE: ${{ steps.ref.outputs.test }}
+    # Every license the image redistributes must be in `.licenses-allowed.txt`; a provider or an
+    # OpenTofu release without an identifiable license fails too.
+    - name: license check
+      run: scripts/license-check.sh "$SCAN_IMAGE"
       env:
         SCAN_IMAGE: ${{ steps.ref.outputs.test }}
     # Every finding for the Security tab. Code scanning needs GitHub Advanced Security on private

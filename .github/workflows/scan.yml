@@ -1,8 +1,9 @@
 name: scan
 
-# Scans the latest released image, and the providers in it, every week. New CVEs show up in images that have not changed, so
-# the scan at release time is not enough. A failed run is the notification: GitHub mails it to
-# whoever watches the repository's Actions.
+# Scans the latest released image, and the providers in it, every week - for vulnerabilities and
+# licenses. New CVEs show up in images that have not changed, so the scan at release time is not
+# enough. A failed run is the notification: GitHub mails it to whoever watches the repository's
+# Actions.
 #
 # Two usual causes:
 # - An accepted finding in `.trivyignore.yaml` has expired: assess it again, then drop or renew
@@ -40,6 +41,13 @@ jobs:
     # `.trivyignore.yaml`. The report, accepted findings included, goes to the job summary.
     - name: trivy scan
       run: scripts/scan.sh "$SCAN_IMAGE"
+      env:
+        SCAN_IMAGE: ${{ steps.ref.outputs.image }}
+    # Every license the image redistributes must be in `.licenses-allowed.txt`; a provider or an
+    # OpenTofu release without an identifiable license fails too.
+    - name: license check
+      if: always()
+      run: scripts/license-check.sh "$SCAN_IMAGE"
       env:
         SCAN_IMAGE: ${{ steps.ref.outputs.image }}
     # Every finding for the Security tab. Code scanning needs GitHub Advanced Security on private

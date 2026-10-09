@@ -105,9 +105,11 @@ images/opentofu/
     └── not-baked/main.tf         # must be refused
 scripts/
 ├── next-version.sh               # next image version, derived from what changed
-└── scan.sh                       # Trivy: image and providers
-Taskfile.yaml                     # the same steps locally, Docker only
+├── scan.sh                       # Trivy: image and providers
+└── license-check.sh              # licenses of everything the image redistributes
+Taskfile.yaml                     # the same steps locally
 .trivyignore.yaml                 # accepted vulnerabilities, with reason and expiry date
+.licenses-allowed.txt             # licenses the image may redistribute
 ```
 
 The image build:
@@ -128,6 +130,7 @@ The image build:
 | **build** - build including the offline smoke test | ✓ (local) | ✓ (pushed as `sha-<commit>`, with SBOM + provenance) |
 | **build** - smoke test in the image (on `main`: freshly pulled from the registry) | ✓ | ✓ |
 | **build** - Trivy scan of the image **and** the providers | ✓ | ✓ (+ SARIF to the Security tab) |
+| **build** - license check of everything the image redistributes | ✓ | ✓ |
 | **release** - tag the image with its version, create git tag + GitHub release | - | ✓ if `images/` changed |
 
 A release promotes the tested and scanned image **by digest** - nothing is rebuilt.
@@ -228,25 +231,28 @@ files, are always accurate.
 
 ## Local development
 
-Requirements: Docker and [Task](https://taskfile.dev). All tools (hadolint, shellcheck, Trivy,
-OpenTofu) run in containers.
+Requirements: Docker, [Task](https://taskfile.dev), and `curl`, `jq` and `unzip`. hadolint,
+shellcheck, Trivy and OpenTofu run in containers.
 
 ```shell
-task              # lint, build (with smoke test), test, scan - what a pull request runs
+task              # lint, build (with smoke test), test, scan, licenses - what a pull request runs
 task build        # build only
 task scan         # Trivy over image and providers
+task licenses     # license check
 task version      # the version a release would get now
 task providers:lock
 ```
 
 ### Adding a provider
 
-1. Add the provider with an exact version and a `registry.opentofu.org/...` source to
+1. Check its license: it has to be on [.licenses-allowed.txt](.licenses-allowed.txt).
+2. Add the provider with an exact version and a `registry.opentofu.org/...` source to
    [images/opentofu/providers/versions.tf](images/opentofu/providers/versions.tf).
-2. Run `task providers:lock`.
-3. Use the provider in [images/opentofu/test/baked/main.tf](images/opentofu/test/baked/main.tf), so
+3. Run `task providers:lock`.
+4. Use the provider in [images/opentofu/test/baked/main.tf](images/opentofu/test/baked/main.tf), so
    the smoke test covers it.
-4. Add it to the "What's inside" table. The release will be a minor release automatically.
+5. Add it to the "What's inside" and "Third-party software" tables. The release will be a minor
+   release automatically.
 
 ## License
 
@@ -257,6 +263,13 @@ The code in this repository - Dockerfile, scripts, workflows, documentation - is
 
 The image redistributes third-party software, unmodified and under its own license. The Apache
 License of this repository does not apply to it.
+
+Every build checks these licenses ([scripts/license-check.sh](scripts/license-check.sh)): each
+license found - Alpine packages, the providers' license files, and the `LICENSE` of the exact
+OpenTofu release in the image - has to be on [.licenses-allowed.txt](.licenses-allowed.txt).
+Licenses that restrict redistribution or use (BUSL, SSPL, Elastic, ...) are not on it, and a
+component whose license cannot be identified fails the build as well. If a provider or OpenTofu
+changes its license in a new version, the update does not get through.
 
 | Component | License | Source |
 |-----------|---------|--------|
