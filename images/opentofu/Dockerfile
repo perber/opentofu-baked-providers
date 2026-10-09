@@ -16,12 +16,13 @@ FROM ghcr.io/opentofu/opentofu:1.13.1-minimal@sha256:dfbc3f0a8bed0adfa2cf49ff418
 FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS base
 
 # What the official image ships next to the binary: `git` and `openssh-client` for module sources
-# in git repositories, `bash` for scripts in the pipelines that run this image. Not pinned to
+# in git repositories, `bash` for scripts in the pipelines that run this image. On top of that `jq`,
+# for pipelines that process `tofu output -json` or `tofu show -json`. Not pinned to
 # package versions on purpose - alpine removes superseded package versions from its mirrors, so a
 # pin breaks the build on the next security fix, while the base image digest above already fixes
 # the release the packages come from.
 # hadolint ignore=DL3018
-RUN apk add --no-cache bash git openssh-client
+RUN apk add --no-cache bash git jq openssh-client
 
 COPY --from=tofu /usr/local/bin/tofu /usr/local/bin/tofu
 
