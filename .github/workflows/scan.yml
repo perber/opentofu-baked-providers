@@ -1,0 +1,58 @@
+name: scan
+
+# Scans the latest released image, and the providers in it, every week. New CVEs show up in images that have not changed, so
+# the scan at release time is not enough. A failed run is the notification: GitHub mails it to
+# whoever watches the repository's Actions.
+#
+# Two usual causes:
+# - An accepted finding in `.trivyignore.yaml` has expired: assess it again, then drop or renew
+#   the entry (skill `trivy-exception-review`).
+# - A new finding: in an Alpine package a rebuild fixes it - Actions → image → Run workflow with
+#   `patch`; in OpenTofu or a provider, the Dependabot pull request for the fixed version does.
+
+on:
+  schedule:
+  - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  security-events: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - id: ref
+      run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}/opentofu:latest" >>"$GITHUB_OUTPUT"
+    - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+      with:
+        version: v0.75.0
+        cache: true
+    # Image and baked-in providers; fails on fixable HIGH or CRITICAL unless accepted in
+    # `.trivyignore.yaml`. The report, accepted findings included, goes to the job summary.
+    - name: trivy scan
+      run: scripts/scan.sh "$SCAN_IMAGE"
+      env:
+        SCAN_IMAGE: ${{ steps.ref.outputs.image }}
+    # Every finding for the Security tab. Code scanning needs GitHub Advanced Security on private
+    # repositories; without it only these uploads fail, not the job.
+    - if: always() && hashFiles('out/scan/image.sarif') != ''
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      with:
+        sarif_file: out/scan/image.sarif
+        category: trivy-image
+    - if: always() && hashFiles('out/scan/providers.sarif') != ''
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      with:
+        sarif_file: out/scan/providers.sarif
+        category: trivy-providers

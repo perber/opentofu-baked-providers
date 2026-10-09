@@ -1,0 +1,77 @@
+version: "3"
+
+# Local counterparts of the GitHub workflow. Everything runs in containers, so docker is the only
+# requirement - no local OpenTofu, hadolint, shellcheck or Trivy.
+
+vars:
+  IMAGE_DIR: images/opentofu
+  LOCAL_IMAGE: local/opentofu:test
+  # The `base` stage, for running the image's own `tofu` outside of a build.
+  BASE_IMAGE: local/opentofu:base
+
+tasks:
+  default:
+    desc: Lint, build with smoke test, and scan - what a pull request runs.
+    cmds:
+    - task: lint
+    - task: build
+    - task: test
+    - task: scan
+
+  lint:
+    desc: hadolint over the Dockerfile, shellcheck over the scripts.
+    cmds:
+    - docker run --rm -i docker.io/hadolint/hadolint:v2.14.0 < {{ .IMAGE_DIR }}/Dockerfile
+    - docker run --rm -v "$PWD:/mnt:ro" -w /mnt docker.io/koalaman/shellcheck:stable scripts/*.sh {{ .IMAGE_DIR }}/test/*.sh
+
+  build:
+    desc: Build the image into the local docker daemon. Runs the offline smoke test as its last step.
+    dir: "{{ .IMAGE_DIR }}"
+    cmds:
+    - docker buildx build --target image --tag {{ .LOCAL_IMAGE }} --load .
+
+  test:
+    desc: Run the smoke test in the built image, the way the pipeline does after pulling it.
+    cmds:
+    - >-
+      docker run --rm --entrypoint sh
+      --volume "$PWD/{{ .IMAGE_DIR }}/test:/test:ro"
+      {{ .LOCAL_IMAGE }} /test/smoke.sh /test
+
+  scan:
+    desc: Trivy scan of the built image and its providers, with the same gate as the pipeline.
+    env:
+      # Trivy in a container, with the working directory mounted at the same path, so the relative
+      # paths the script uses mean the same inside and outside.
+      TRIVY: >-
+        docker run --rm
+        --volume /var/run/docker.sock:/var/run/docker.sock
+        --volume {{ .ROOT_DIR }}:{{ .ROOT_DIR }} --workdir {{ .ROOT_DIR }}
+        --volume trivy-cache:/root/.cache/trivy
+        docker.io/aquasec/trivy:0.75.0
+    cmds:
+    - scripts/scan.sh {{ .LOCAL_IMAGE }}
+
+  version:
+    desc: "Show the version a release of HEAD would get: `task version`, or `task version -- patch`."
+    cmds:
+    - scripts/next-version.sh {{ .CLI_ARGS | default "auto" }}
+
+  providers:lock:
+    desc: Regenerate the provider lock file from `providers/versions.tf`.
+    summary: |-
+      Writes the checksums of every platform the image may be built for. Runs `tofu` out of the
+      `base` stage of the Dockerfile, so it always uses the OpenTofu version the image ships.
+
+      Always from scratch: an existing lock file pins the old version of a provider whose version
+      changed, and `tofu providers lock` refuses to move it. Nothing is lost by that - every hash
+      comes from the registry again and the package signature is verified again. A correct lock
+      file comes out byte for byte the same, so `git diff` after this task shows real changes only.
+    cmds:
+    - docker buildx build --target base --tag {{ .BASE_IMAGE }} --load {{ .IMAGE_DIR }}
+    - rm -f {{ .IMAGE_DIR }}/providers/.terraform.lock.hcl
+    - >-
+      docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp
+      --volume "$PWD/{{ .IMAGE_DIR }}/providers:/w" -w /w
+      --entrypoint tofu {{ .BASE_IMAGE }}
+      providers lock -platform=linux_amd64 -platform=linux_arm64

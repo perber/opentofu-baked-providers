@@ -1,0 +1,62 @@
+# Vulnerabilities accepted for the image. Read by `scripts/scan.sh`, locally and in both workflows.
+#
+# Every entry:
+# - is limited to the binary it was assessed for (`paths`), so the same CVE in any other binary
+#   is still reported and still fails the scan;
+# - says why it does not affect the image (`statement`);
+# - expires (`expired_at`). After that date the scan fails again on the finding, and someone has
+#   to look at it once more: drop the entry if a fixed release is out (Dependabot usually has the
+#   pull request open by then), or move the date if the reasoning still holds.
+#
+# Paths are relative to the scanned target: the image root for the image, the unpacked provider
+# mirror for the providers.
+#
+# Keep this short. An entry is a decision, not a way to make the scan pass.
+
+vulnerabilities:
+# ── Go standard library 1.27.1 - fixed in Go 1.27.2 (2026-10), which neither OpenTofu 1.13.1 nor
+#    the Vault provider 5.12.0 is built with yet. ────────────────────────────────────────────────
+- id: CVE-2026-78667
+  paths:
+  - usr/local/bin/tofu
+  - registry.opentofu.org/hashicorp/vault/terraform-provider-vault
+  statement: >-
+    CPU exhaustion in net/http FileServer/ServeContent/ServeFile on Range headers. Server side only:
+    neither tofu nor the provider serves files over HTTP. Assessed 2026-10-09.
+  expired_at: 2026-11-08
+
+- id: CVE-2026-97031
+  paths:
+  - usr/local/bin/tofu
+  - registry.opentofu.org/hashicorp/vault/terraform-provider-vault
+  statement: >-
+    Memory exhaustion of a crypto/tls SERVER through repeated ECH outer extension references. Both
+    binaries only act as TLS clients. Assessed 2026-10-09.
+  expired_at: 2026-11-08
+
+# ── OpenTofu 1.13.1 dependencies ──────────────────────────────────────────────────────────────────
+- id: CVE-2026-56864
+  paths:
+  - usr/local/bin/tofu
+  statement: >-
+    golang.org/x/mod sumdb: a malicious GOSUMDB can serve module content outside the transparency
+    log. The vulnerable sumdb client is not even compiled in: OpenTofu 1.13.1 imports only
+    golang.org/x/mod/sumdb/dirhash (to compute h1: hashes). Assessed 2026-10-09.
+  expired_at: 2026-11-08
+
+- id: CVE-2026-56865
+  paths:
+  - usr/local/bin/tofu
+  statement: >-
+    golang.org/x/mod sumdb/tlog: a malicious GOPROXY can forge sumdb tiles. sumdb/tlog is not
+    compiled in: OpenTofu 1.13.1 imports only golang.org/x/mod/sumdb/dirhash. Assessed 2026-10-09.
+  expired_at: 2026-11-08
+
+- id: CVE-2026-84445
+  paths:
+  - usr/local/bin/tofu
+  statement: >-
+    gRPC-Go: servers created with xds.NewGRPCServer() crash on RPCs without :authority. tofu uses
+    gRPC only to talk to provider processes it starts itself, over a local socket, without xDS.
+    Assessed 2026-10-09.
+  expired_at: 2026-11-08

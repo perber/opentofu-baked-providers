@@ -1,0 +1,36 @@
+# Weekly update pull requests for everything the image is built from. Each one runs the full image
+# workflow, and once merged, `scripts/next-version.sh` turns it into a release: a patch or minor
+# update of OpenTofu or a provider into a minor or patch release, a major one into a major release.
+version: 2
+
+updates:
+# OpenTofu (`-minimal` tag and digest) and the Alpine base image in the Dockerfile.
+- package-ecosystem: docker
+  directory: /images/opentofu
+  schedule:
+    interval: weekly
+  labels: [dependencies, image]
+  commit-message:
+    prefix: "deps(image)"
+
+# The baked-in providers in `versions.tf` and their checksums in `.terraform.lock.hcl`. The `opentofu`
+# ecosystem rather than `terraform`: it resolves providers against registry.opentofu.org, where the
+# image gets them, and updates the lock file with them. Community-maintained by OpenTofu.
+- package-ecosystem: opentofu
+  directory: /images/opentofu/providers
+  schedule:
+    interval: weekly
+  labels: [dependencies, providers]
+  commit-message:
+    prefix: "deps(providers)"
+
+- package-ecosystem: github-actions
+  directory: /
+  schedule:
+    interval: weekly
+  labels: [dependencies, ci]
+  commit-message:
+    prefix: "ci"
+  groups:
+    actions:
+      patterns: ["*"]

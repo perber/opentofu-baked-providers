@@ -1,0 +1,231 @@
+name: image
+
+# Pull requests: lint, build (which runs the offline smoke test), smoke test the built image, Trivy
+# scan, and show the version a merge would release. Nothing is pushed.
+#
+# Default branch: the same, then push the image as `sha-<commit>`, pull it back and test and scan
+# exactly that, and - if anything below `images/` changed since the last release - promote it to
+# `X.Y.Z`, `X.Y`, `X` and `latest` and create the git tag and GitHub release. See
+# `scripts/next-version.sh` for how the version is chosen.
+#
+# Manually (Actions → image → Run workflow): release with a forced bump, e.g. `patch` to republish
+# with the latest Alpine package fixes after the weekly scan found something.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump. `auto` derives it from what changed; anything else forces a release."
+        type: choice
+        default: auto
+        options: [auto, patch, minor, major]
+
+# Releases on the default branch run one after another, never side by side: each one computes its
+# version from the tag the previous one created. Pull request runs replace each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_DIR: images/opentofu
+  REGISTRY: ghcr.io
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+      with:
+        dockerfile: ${{ env.IMAGE_DIR }}/Dockerfile
+    - name: shellcheck
+      run: shellcheck scripts/*.sh "$IMAGE_DIR"/test/*.sh
+
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      release: ${{ steps.next.outputs.release }}
+      bump: ${{ steps.next.outputs.bump }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        # The whole history with tags: the version is computed against the last release tag.
+        fetch-depth: 0
+    - id: next
+      env:
+        BUMP: ${{ inputs.bump || 'auto' }}
+      run: scripts/next-version.sh "$BUMP"
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: release-notes
+        path: out/release-notes.md
+
+  build:
+    needs: [lint, version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # Upload of the Trivy SARIF report to the Security tab.
+      security-events: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    # The image is published as `ghcr.io/<owner>/<repository>/opentofu`. Registry references have
+    # to be lower case; the repository name may not be.
+    - id: ref
+      run: |
+        image="${REGISTRY}/${GITHUB_REPOSITORY,,}/opentofu"
+        echo "image=${image}" >>"$GITHUB_OUTPUT"
+        if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          echo "test=local/opentofu:test" >>"$GITHUB_OUTPUT"
+        else
+          echo "test=${image}:sha-${GITHUB_SHA}" >>"$GITHUB_OUTPUT"
+        fi
+
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+    - if: github.event_name != 'pull_request'
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # The last step of the Dockerfile is the smoke test without network: a build that succeeds has
+    # passed it.
+    #
+    # Pull requests load the image into the local daemon; the default branch pushes it under its
+    # commit, with SBOM and provenance attached - the version tags are only added once it has been
+    # tested and scanned as pulled from the registry.
+    - if: github.event_name == 'pull_request'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: ${{ env.IMAGE_DIR }}
+        target: image
+        load: true
+        tags: ${{ steps.ref.outputs.test }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    - id: push
+      if: github.event_name != 'pull_request'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: ${{ env.IMAGE_DIR }}
+        target: image
+        push: true
+        tags: ${{ steps.ref.outputs.test }}
+        labels: |
+          org.opencontainers.image.title=opentofu
+          org.opencontainers.image.description=OpenTofu with baked-in providers, installs no providers at run time
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.version=${{ needs.version.outputs.version || format('sha-{0}', github.sha) }}
+        provenance: mode=max
+        sbom: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    # The same smoke test once more, in the image the way a pipeline using it gets it: pulled from
+    # the registry, run through its entrypoint-free shell, with the CLI configuration of the image.
+    - name: smoke test
+      env:
+        TEST_IMAGE: ${{ steps.ref.outputs.test }}
+      run: |
+        if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+          docker image rm --force "$TEST_IMAGE" >/dev/null 2>&1 || true
+          docker pull "$TEST_IMAGE"
+        fi
+        docker run --rm --entrypoint sh \
+          --volume "$PWD/$IMAGE_DIR/test:/test:ro" \
+          "$TEST_IMAGE" /test/smoke.sh /test
+
+    - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+      with:
+        version: v0.75.0
+        cache: true
+    # Image and baked-in providers; fails on fixable HIGH or CRITICAL unless accepted in
+    # `.trivyignore.yaml`. The report, accepted findings included, goes to the job summary.
+    - name: trivy scan
+      run: scripts/scan.sh "$SCAN_IMAGE"
+      env:
+        SCAN_IMAGE: ${{ steps.ref.outputs.test }}
+    # Every finding for the Security tab. Code scanning needs GitHub Advanced Security on private
+    # repositories; without it only these uploads fail, not the job.
+    - if: always() && github.event_name != 'pull_request' && hashFiles('out/scan/image.sarif') != ''
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      with:
+        sarif_file: out/scan/image.sarif
+        category: trivy-image
+    - if: always() && github.event_name != 'pull_request' && hashFiles('out/scan/providers.sarif') != ''
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      with:
+        sarif_file: out/scan/providers.sarif
+        category: trivy-providers
+
+  release:
+    needs: [version, build]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      IMAGE: ${{ needs.build.outputs.image }}
+      DIGEST: ${{ needs.build.outputs.digest }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: release-notes
+        path: out
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+    - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Promotes the tested and scanned image by its digest - nothing is rebuilt, and SBOM and
+    # provenance stay attached.
+    - name: tag image
+      run: |
+        IFS=. read -r major minor _ <<<"$VERSION"
+        docker buildx imagetools create \
+          --tag "${IMAGE}:${VERSION}" \
+          --tag "${IMAGE}:${major}.${minor}" \
+          --tag "${IMAGE}:${major}" \
+          --tag "${IMAGE}:latest" \
+          "${IMAGE}@${DIGEST}"
+
+    - name: git tag and GitHub release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BUMP: ${{ needs.version.outputs.bump }}
+      run: |
+        {
+          echo "Image: \`${IMAGE}:${VERSION}\`"
+          echo
+          echo "Digest: \`${DIGEST}\`"
+          echo
+          echo "Bump: ${BUMP}"
+          echo
+          cat out/release-notes.md
+        } >out/notes.md
+        gh release create "v${VERSION}" \
+          --target "$GITHUB_SHA" \
+          --title "v${VERSION}" \
+          --notes-file out/notes.md
