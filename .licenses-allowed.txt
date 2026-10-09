@@ -1,0 +1,31 @@
+# Licenses the image may redistribute, one identifier per line, as Trivy reports them (SPDX where
+# Trivy maps to it). Read by `scripts/license-check.sh`: any license found in the image or in a
+# baked-in provider that is not listed here fails the build.
+#
+# Trivy's own license categories are not used: they are written for proprietary products and rate
+# every GPL "restricted". Redistributing unmodified GPL packages of Alpine, with their sources public
+# in Alpine's aports, is fine for this image. What is not fine is anything that restricts
+# redistribution or use - e.g. BUSL-1.1 (HashiCorp's Terraform license since 2023), SSPL-1.0,
+# Elastic-2.0, Commons Clause, or no license at all. Never add those; ask instead.
+#
+# Adding a license is a decision: make it in a pull request of its own, with the component that
+# needs it and why the license allows redistributing it in the image.
+
+# Permissive
+Apache-2.0
+BSD-2-Clause
+BSD-3-Clause
+MIT
+Zlib
+curl
+X-11
+SSH-OpenSSH
+
+# Weak copyleft - OpenTofu, the providers, ca-certificates
+MPL-2.0
+
+# Copyleft - Alpine base packages (busybox, bash, git, readline, ...), redistributed unmodified
+GPL-2.0-only
+GPL-2.0-or-later
+GPL-3.0-or-later
+LGPL-3.0-or-later

@@ -29,6 +29,13 @@ curl -sf https://registry.opentofu.org/v1/providers/<namespace>/<name>/versions 
 
 - It has to exist on `registry.opentofu.org`. If it only exists on registry.terraform.io, stop and
   report that; do not add another installation source.
+- Check its license before anything else - the image redistributes the provider:
+  ```shell
+  gh api repos/<owner>/terraform-provider-<name>/license --jq .license.spdx_id   # repository from the registry's provider page
+  ```
+  It has to be on `.licenses-allowed.txt`. Not on the list → stop and ask; BUSL, SSPL, Elastic,
+  "NOASSERTION" or no license → the provider does not go in (AGENTS.md, invariant 7). The package
+  has to ship a `LICENSE` file, or `task licenses` fails later anyway.
 - Use an exact version, normally the latest release. For an update, read the provider's changelog
   between the old and the new version and list breaking changes for the report.
 
@@ -75,7 +82,7 @@ that test must keep naming a provider that is NOT baked in.
 ### 5. Build, test, scan
 
 ```shell
-task          # lint, build (offline smoke test), test, scan
+task          # lint, build (offline smoke test), test, scan, licenses
 ```
 
 A new or updated provider binary often brings its own Trivy findings. Handle them with the
@@ -90,7 +97,8 @@ toolchain are the usual case.
 
 ### 6. Documentation and expected release
 
-- `README.md`: the "What's inside" table, and every other place that names the
+- `README.md`: the "What's inside" table, a row in the "Third-party software" table (license and
+  source repository), and every other place that names the
   baked-in providers - the smoke test description in the pipeline section, the usage example,
   the Trivy section if exceptions changed.
 - Commit, then show the release this change will trigger once merged (`task version` compares the
@@ -105,7 +113,7 @@ toolchain are the usual case.
 
 ## Report
 
-- provider, old → new version, signed yes/no
+- provider, old → new version, signed yes/no, license
 - breaking changes from the changelog (for updates)
 - Trivy result and any new exceptions
 - expected image release (`task version`)

@@ -22,6 +22,8 @@ time - however convenient - is out of scope.
 - `scripts/next-version.sh` - next image version, derived from what changed (see Versioning).
 - `scripts/scan.sh` - Trivy over the image AND the unpacked providers; the gate.
 - `.trivyignore.yaml` - accepted findings, each scoped, justified and expiring.
+- `scripts/license-check.sh` + `.licenses-allowed.txt` - every license the image redistributes must
+  be on the allowlist.
 - `.github/workflows/image.yml` - lint, version, build + test + scan, release. `scan.yml` - weekly
   scan of `latest`. `.github/dependabot.yml` - update PRs.
 - `Taskfile.yaml` - the same steps locally. `README.md` - user documentation.
@@ -49,6 +51,12 @@ Do not break these. If a task seems to require it, stop and say so.
    scan, or add unscoped/non-expiring entries to `.trivyignore.yaml` to get a pipeline green.
 6. **Nothing is pushed untested.** The smoke test is the last Dockerfile step and runs with
    `--network=none`; releases promote the tested and scanned image by digest, never a rebuild.
+7. **Only redistributable licenses.** Everything in the image must be under a license on
+   `.licenses-allowed.txt`, and `scripts/license-check.sh` enforces it. Never add BUSL, SSPL,
+   Elastic, Commons Clause, a license that forbids redistribution or commercial use, or "no
+   license" to the list - stop and ask instead. A new license on the list is a decision of its own:
+   a separate pull request that names the component and why its license allows redistribution.
+   Every component the image ships is listed under "Third-party software" in the README.
 
 ## Versioning
 
@@ -63,13 +71,15 @@ create `v*` tags by hand - the release job does, and the next version is compute
 
 ## Commands
 
-Docker and [Task](https://taskfile.dev) are the only requirements; every tool runs in a container.
+Requirements: Docker, [Task](https://taskfile.dev), and `curl`, `jq`, `unzip` on the host. hadolint,
+shellcheck, Trivy and OpenTofu run in containers.
 
 ```sh
-task                  # lint, build (offline smoke test), test, scan - what a pull request runs
+task                  # lint, build (offline smoke test), test, scan, licenses - what a PR runs
 task build            # build into the local daemon as local/opentofu:test
 task test             # smoke test in the built image
 task scan             # Trivy: image + providers, same gate as CI
+task licenses         # license check of everything the image redistributes
 task version          # release the committed HEAD would get, against the last v* tag
 task providers:lock   # regenerate the lock file after editing versions.tf
 ```
@@ -84,8 +94,9 @@ task providers:lock   # regenerate the lock file after editing versions.tf
 
 Use these for the recurring tasks - they hold the decision rules:
 
-- `.claude/skills/bake-in-provider/SKILL.md` - add, update or remove a provider.
-- `.claude/skills/dependabot-update-review/SKILL.md` - review a Dependabot PR before merging.
+- `.claude/skills/bake-in-provider/SKILL.md` - add, update or remove a provider (license included).
+- `.claude/skills/dependabot-update-review/SKILL.md` - review a Dependabot PR before merging, including
+  a license change between the versions.
 - `.claude/skills/trivy-exception-review/SKILL.md` - a red scan, an expiring exception, "does CVE X
   affect us".
 
@@ -102,8 +113,8 @@ Claude Code loads them as skills; other agents read the file at the path given.
 - Comments explain why, not what - match the density and tone of the existing files.
 - `CLAUDE.md` only imports this file (`@AGENTS.md`). Keep instructions here, for every agent alike.
 - When a change alters what the image contains or how it behaves, update the README in the same
-  change: the "What's inside" table, the Trivy section's count of accepted findings, the
-  pipeline and versioning descriptions.
+  change: the "What's inside" table, the "Third-party software" table, the Trivy section's count
+  of accepted findings, the pipeline and versioning descriptions.
 - Verify before reporting: `task` for image changes, actionlint for workflow changes
   (`docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:latest .github/workflows/*.yml`),
   shellcheck for scripts (part of `task lint`).

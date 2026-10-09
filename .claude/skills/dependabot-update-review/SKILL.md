@@ -62,6 +62,21 @@ git diff main...<branch> --stat && git diff main...<branch>
   review. Typical Dependabot errors: a new block keyed `registry.terraform.io/...` next to the
   `registry.opentofu.org/...` block, which still pins the OLD version; hashes for one platform only.
 - Signature: the `task providers:lock` output must say `signed` for the new version.
+
+### License (OpenTofu and providers)
+
+A new version can come under a new license - HashiCorp moved Terraform from MPL-2.0 to BUSL-1.1 in
+a minor release (1.6), and Dependabot offers such an update like any other. Compare the license at
+both versions:
+
+```shell
+for tag in <old tag> <new tag>; do
+  curl -sfL "https://raw.githubusercontent.com/<owner>/<repo>/${tag}/LICENSE" | head -5
+done
+```
+
+`task licenses` on the PR branch must pass. Any change of license is a **hold**, whatever the
+pipeline says - report it.
 - Read the provider's changelog between the versions. List anything that breaks existing
   configurations (removed or renamed resources and attributes, changed defaults, auth changes).
 
@@ -107,6 +122,7 @@ updates - Dependabot does not.
 | Pipeline | green / red (step) |
 | Lock file (providers) | unchanged by `task providers:lock` / regenerated |
 | Signature (providers) | signed (key ID) / NOT signed |
+| License | unchanged (`<SPDX>`) / CHANGED: old → new |
 | Breaking changes from changelog | none / list |
 | Release on merge | `X.Y.Z` (bump) - appropriate yes/no |
 | Trivy exceptions | unchanged / removed: CVE-… |
