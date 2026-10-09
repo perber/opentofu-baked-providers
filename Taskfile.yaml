@@ -66,6 +66,19 @@ tasks:
     cmds:
     - scripts/license-check.sh {{ .LOCAL_IMAGE }}
 
+  sbom:
+    desc: SBOM (CycloneDX + SPDX) of the built image, providers included, into out/sbom/.
+    env:
+      # The same containerised Trivy as `scan`.
+      TRIVY: >-
+        docker run --rm
+        --volume /var/run/docker.sock:/var/run/docker.sock
+        --volume {{ .ROOT_DIR }}:{{ .ROOT_DIR }} --workdir {{ .ROOT_DIR }}
+        --volume trivy-cache:/root/.cache/trivy
+        docker.io/aquasec/trivy:0.75.0
+    cmds:
+    - scripts/sbom.sh {{ .LOCAL_IMAGE }}
+
   version:
     desc: "Show the version a release of HEAD would get: `task version`, or `task version -- patch`."
     cmds:

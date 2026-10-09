@@ -24,6 +24,8 @@ time - however convenient - is out of scope.
 - `.trivyignore.yaml` - accepted findings, each scoped, justified and expiring.
 - `scripts/license-check.sh` + `.licenses-allowed.txt` - every license the image redistributes must
   be on the allowlist.
+- `scripts/sbom.sh` - SBOM of the image with the providers unpacked; attached to every release.
+- `TODO.md` - open decisions (signed attestations).
 - `.github/workflows/image.yml` - lint, version, build + test + scan, release. `scan.yml` - weekly
   scan of `latest`. `.github/dependabot.yml` - update PRs.
 - `Taskfile.yaml` - the same steps locally. `README.md` - user documentation.
@@ -39,7 +41,9 @@ Do not break these. If a task seems to require it, stop and say so.
 2. **Providers come from the registry, unmodified.** The mirror keeps the packed layout (the
    original zips): consumer lock files match through their `zh:` hashes on any platform. Never
    unpack providers in the image, and never rebuild OpenTofu or a provider from source - that
-   breaks the registry checksums and signatures every consumer's lock file relies on.
+   breaks the registry checksums and signatures every consumer's lock file relies on. Because they
+   are zips, every tool that inspects the image - vulnerability scan, license check, SBOM - has to
+   unpack them first; a new tool of that kind has to as well, or it silently misses the providers.
 3. **Exact, verified versions.** Providers: exact `version`, `source` with the explicit host
    `registry.opentofu.org/...`, lock file with hashes for `linux_amd64` and `linux_arm64`, regenerated
    only with `task providers:lock`. Images: tag AND digest in every `FROM`. Actions: full commit SHA
@@ -80,6 +84,7 @@ task build            # build into the local daemon as local/opentofu:test
 task test             # smoke test in the built image
 task scan             # Trivy: image + providers, same gate as CI
 task licenses         # license check of everything the image redistributes
+task sbom             # SBOM (CycloneDX + SPDX) of the built image into out/sbom/
 task version          # release the committed HEAD would get, against the last v* tag
 task providers:lock   # regenerate the lock file after editing versions.tf
 ```
