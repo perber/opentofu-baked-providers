@@ -17,7 +17,7 @@ terraform {
     # Also the provider for OpenBao, which speaks the Vault API.
     vault = {
       source  = "registry.opentofu.org/hashicorp/vault"
-      version = "5.12.0"
+      version = "5.13.0"
     }
   }
 }
