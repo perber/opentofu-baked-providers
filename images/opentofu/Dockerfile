@@ -11,7 +11,7 @@
 # The official image is not used as a base: since OpenTofu 1.10 it carries an `ONBUILD RUN exit 1`
 # that fails every `FROM` on it, and upstream asks for the binary to be copied out of the
 # `-minimal` variant instead - https://opentofu.org/docs/intro/install/docker/.
-FROM ghcr.io/opentofu/opentofu:1.13.1-minimal@sha256:dfbc3f0a8bed0adfa2cf49ff418f158afe24080eea6d6e748db8799fc4553db6 AS tofu
+FROM ghcr.io/opentofu/opentofu:1.13.2-minimal@sha256:622dc6bb98b105c18f53cf419ab64a4f3b88bd9f8c16cc978cf89e4202f4613f AS tofu
 
 FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS base
 
