@@ -13,7 +13,7 @@
 # `-minimal` variant instead - https://opentofu.org/docs/intro/install/docker/.
 FROM ghcr.io/opentofu/opentofu:1.13.1-minimal@sha256:dfbc3f0a8bed0adfa2cf49ff418f158afe24080eea6d6e748db8799fc4553db6 AS tofu
 
-FROM docker.io/library/alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS base
+FROM docker.io/library/alpine:3.24.3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a AS base
 
 # What the official image ships next to the binary: `git` and `openssh-client` for module sources
 # in git repositories, `bash` for scripts in the pipelines that run this image. On top of that `jq`,
